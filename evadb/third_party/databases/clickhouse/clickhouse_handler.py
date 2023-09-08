@@ -141,7 +141,7 @@ class ClickHouseHandler(DBHandler):
                 return pd.DataFrame({"status": ["success"]})
             res_df = pd.DataFrame(res, columns=[desc[0] for desc in cursor.description])
             return res_df
-        except mysql.connector.ProgrammingError as e:
+        except Exception as e:
             if str(e) == "no results to fetch":
                 return pd.DataFrame({"status": ["success"]})
             raise e
@@ -161,7 +161,7 @@ class ClickHouseHandler(DBHandler):
             cursor = self.connection.cursor()
             cursor.execute(query_string)
             return DBHandlerResponse(data=self._fetch_results_as_df(cursor))
-        except mysql.connector.Error as e:
+        except Exception as e:
             return DBHandlerResponse(data=None, error=str(e))
 
     def _mysql_to_python_types(self, mysql_type: str):
