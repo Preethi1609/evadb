@@ -14,7 +14,6 @@
 # limitations under the License.
 import pandas as pd
 from sqlalchemy import create_engine
-# from clickhouse_sqlalchemy.drivers.base import ClickHouseDialect
 
 from evadb.third_party.databases.types import (
     DBHandler,
@@ -38,7 +37,6 @@ class ClickHouseHandler(DBHandler):
         self.password = kwargs.get("password")
         self.database = kwargs.get("database")
         self.protocol = kwargs.get("protocol")
-        # self.renderer = SqlalchemyRender(ClickHouseDialect)
         protocols_map = {
             'native': 'clickhouse+native',
             'http': 'clickhouse+http',
@@ -119,22 +117,12 @@ class ClickHouseHandler(DBHandler):
         try:
             query = f"DESCRIBE {table_name}"
             columns_df = pd.read_sql_query(query, self.connection)
-            columns_df["dtype"] = columns_df["dtype"].apply(self._mysql_to_python_types)
+            columns_df["dtype"] = columns_df["dtype"].apply(self._clickhouse_to_python_types)
             return DBHandlerResponse(data=columns_df)
         except Exception as e:
             return DBHandlerResponse(data=None, error=str(e))
 
     def _fetch_results_as_df(self, cursor):
-        """
-        This is currently the only clean solution that we have found so far.
-        Reference to MySQL API: https://dev.mysql.com/doc/connector-python/en/connector-python-api-mysqlcursor-fetchall.html
-        In short, currently there is no very clean programming way to differentiate
-        CREATE, INSERT, SELECT. CREATE and INSERT do not return any result, so calling
-        fetchall() on those will yield a programming error. Cursor has an attribute
-        rowcount, but it indicates # of rows that are affected. In that case, for both
-        INSERT and SELECT rowcount is not 0, so we also cannot use this API to
-        differentiate INSERT and SELECT.
-        """
         try:
             res = cursor.fetchall()
             if not res:
@@ -164,7 +152,7 @@ class ClickHouseHandler(DBHandler):
         except Exception as e:
             return DBHandlerResponse(data=None, error=str(e))
 
-    def _mysql_to_python_types(self, mysql_type: str):
+    def _clickhouse_to_python_types(self, clickhouse_type: str):
         mapping = {
             "char": str,
             "varchar": str,
@@ -177,9 +165,9 @@ class ClickHouseHandler(DBHandler):
             # Add more mappings as needed
         }
 
-        if mysql_type in mapping:
-            return mapping[mysql_type]
+        if clickhouse_type in mapping:
+            return mapping[clickhouse_type]
         else:
             raise Exception(
-                f"Unsupported column {mysql_type} encountered in the mysql table. Please raise a feature request!"
+                f"Unsupported column {clickhouse_type} encountered in the clickhouse table. Please raise a feature request!"
             )
