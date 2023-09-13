@@ -200,7 +200,7 @@ class NativeExecutorTest(unittest.TestCase):
         # Test executions.
         self._execute_native_query()
         self._execute_evadb_query()
-    
+
     def test_should_run_query_in_clickhouse(self):
         # Create database.
         params = {

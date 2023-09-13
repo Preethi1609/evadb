@@ -38,13 +38,12 @@ class ClickHouseHandler(DBHandler):
         self.database = kwargs.get("database")
         self.protocol = kwargs.get("protocol")
         protocols_map = {
-            'native': 'clickhouse+native',
-            'http': 'clickhouse+http',
-            'https': 'clickhouse+https',
+            "native": "clickhouse+native",
+            "http": "clickhouse+http",
+            "https": "clickhouse+https",
         }
         if self.protocol in protocols_map:
             self.protocol = protocols_map[self.protocol]
-        
 
     def connect(self):
         """
@@ -59,8 +58,8 @@ class ClickHouseHandler(DBHandler):
             user = self.user
             password = self.password
             database = self.database
-            url = f'{protocol}://{user}:{password}@{host}:{port}/{database}'
-            if self.protocol == 'clickhouse+https':
+            url = f"{protocol}://{user}:{password}@{host}:{port}/{database}"
+            if self.protocol == "clickhouse+https":
                 url = url + "?protocol=https"
 
             engine = create_engine(url)
@@ -117,7 +116,9 @@ class ClickHouseHandler(DBHandler):
         try:
             query = f"DESCRIBE {table_name}"
             columns_df = pd.read_sql_query(query, self.connection)
-            columns_df["dtype"] = columns_df["dtype"].apply(self._clickhouse_to_python_types)
+            columns_df["dtype"] = columns_df["dtype"].apply(
+                self._clickhouse_to_python_types
+            )
             return DBHandlerResponse(data=columns_df)
         except Exception as e:
             return DBHandlerResponse(data=None, error=str(e))
