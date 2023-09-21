@@ -31,6 +31,7 @@ import pytest
 
 from evadb.binder.binder_utils import BinderError
 from evadb.models.storage.batch import Batch
+from evadb.optimizer.operators import LogicalFilter
 from evadb.server.command_handler import execute_query_fetch_all
 
 NUM_FRAMES = 10
@@ -314,6 +315,18 @@ class SelectExecutorTest(unittest.TestCase):
         self.assertEqual(len(unnest_batch), 10)
         self.assertEqual(unnest_batch, expected)
 
+    def test_select_without_from(self):
+        # Check test/integration_tests/long/test_model_forecasting.py for `SELECT FUNC(1)` test cases.
+        query = """SELECT 1;"""
+        batch = execute_query_fetch_all(self.evadb, query)
+        expected = Batch(pd.DataFrame([{0: 1}]))
+        self.assertEqual(batch, expected)
+
+        query = """SELECT 1>2;"""
+        batch = execute_query_fetch_all(self.evadb, query)
+        expected = Batch(pd.DataFrame([{0: False}]))
+        self.assertEqual(batch, expected)
+
     def test_should_raise_error_with_missing_alias_in_lateral_join(self):
         function_name = "DummyMultiObjectDetector"
         query = """SELECT id, labels
@@ -404,9 +417,10 @@ class SelectExecutorTest(unittest.TestCase):
 
     def test_expression_tree_signature(self):
         plan = get_logical_query_plan(
-            self.evadb, "SELECT DummyMultiObjectDetector(data).labels FROM MyVideo"
+            self.evadb,
+            "SELECT id FROM MyVideo WHERE DummyMultiObjectDetector(data).labels @> ['person'];",
         )
-        signature = plan.target_list[0].signature()
+        signature = next(plan.find_all(LogicalFilter)).predicate.children[0].signature()
         function_id = (
             self.evadb.catalog()
             .get_function_catalog_entry_by_name("DummyMultiObjectDetector")

@@ -106,6 +106,7 @@ class ParserTests(unittest.TestCase):
 
         expected_stmt = CreateIndexStatement(
             "testindex",
+            False,
             TableRef(TableInfo("MyVideo")),
             [
                 ColumnDefinition("featCol", None, None, None),
@@ -113,6 +114,15 @@ class ParserTests(unittest.TestCase):
             VectorStoreType.FAISS,
         )
         actual_stmt = evadb_stmt_list[0]
+        self.assertEqual(actual_stmt, expected_stmt)
+
+        # create if_not_exists
+        create_index_query = (
+            "CREATE INDEX IF NOT EXISTS testindex ON MyVideo (featCol) USING FAISS;"
+        )
+        evadb_stmt_list = parser.parse(create_index_query)
+        actual_stmt = evadb_stmt_list[0]
+        expected_stmt._if_not_exists = True
         self.assertEqual(actual_stmt, expected_stmt)
 
         # create index on Function expression
@@ -130,6 +140,7 @@ class ParserTests(unittest.TestCase):
         func_expr.append_child(TupleValueExpression("featCol"))
         expected_stmt = CreateIndexStatement(
             "testindex",
+            False,
             TableRef(TableInfo("MyVideo")),
             [
                 ColumnDefinition("featCol", None, None, None),
@@ -570,7 +581,7 @@ class ParserTests(unittest.TestCase):
     def test_select_function_star(self):
         parser = Parser()
 
-        query = "SELECT DemoFunc(*) FROM DemoDB.DemoTable"
+        query = "SELECT DemoFunc(*) FROM DemoDB.DemoTable;"
         evadb_stmt_list = parser.parse(query)
 
         # check stmt itself
@@ -596,6 +607,33 @@ class ParserTests(unittest.TestCase):
         self.assertIsInstance(select_stmt.from_table, TableRef)
         self.assertEqual(select_stmt.from_table.table.table_name, "DemoTable")
         self.assertEqual(select_stmt.from_table.table.database_name, "DemoDB")
+
+    def test_select_without_table_source(self):
+        parser = Parser()
+
+        query = "SELECT DemoFunc(12);"
+        evadb_stmt_list = parser.parse(query)
+
+        # check stmt itself
+        self.assertIsInstance(evadb_stmt_list, list)
+        self.assertEqual(len(evadb_stmt_list), 1)
+        self.assertEqual(evadb_stmt_list[0].stmt_type, StatementType.SELECT)
+        select_stmt = evadb_stmt_list[0]
+
+        # target List
+        self.assertIsNotNone(select_stmt.target_list)
+        self.assertEqual(len(select_stmt.target_list), 1)
+        self.assertEqual(
+            select_stmt.target_list[0].etype, ExpressionType.FUNCTION_EXPRESSION
+        )
+        self.assertEqual(len(select_stmt.target_list[0].children), 1)
+        self.assertEqual(
+            select_stmt.target_list[0].children[0].etype, ExpressionType.CONSTANT_VALUE
+        )
+        self.assertEqual(select_stmt.target_list[0].children[0].value, 12)
+
+        # from_table
+        self.assertIsNone(select_stmt.from_table)
 
     def test_table_ref(self):
         """Testing table info in TableRef
@@ -655,6 +693,44 @@ class ParserTests(unittest.TestCase):
 
         self.assertEqual(delete_stmt, expected_stmt)
 
+    def test_create_predict_function_statement(self):
+        parser = Parser()
+        create_func_query = """
+            CREATE OR REPLACE FUNCTION HomeSalesForecast FROM
+            ( SELECT * FROM postgres_data.home_sales )
+            TYPE Forecasting
+            PREDICT 'price';
+        """
+        evadb_statement_list = parser.parse(create_func_query)
+        self.assertIsInstance(evadb_statement_list, list)
+        self.assertEqual(len(evadb_statement_list), 1)
+        self.assertEqual(
+            evadb_statement_list[0].stmt_type, StatementType.CREATE_FUNCTION
+        )
+        create_func_stmt = evadb_statement_list[0]
+        self.assertEqual(create_func_stmt.name, "HomeSalesForecast")
+        self.assertEqual(create_func_stmt.or_replace, True)
+        self.assertEqual(create_func_stmt.if_not_exists, False)
+        self.assertEqual(create_func_stmt.impl_path, None)
+        self.assertEqual(create_func_stmt.inputs, [])
+        self.assertEqual(create_func_stmt.outputs, [])
+        self.assertEqual(create_func_stmt.function_type, "Forecasting")
+        self.assertEqual(create_func_stmt.metadata, [("predict", "price")])
+
+        nested_select_stmt = create_func_stmt.query
+        self.assertEqual(nested_select_stmt.stmt_type, StatementType.SELECT)
+        self.assertEqual(len(nested_select_stmt.target_list), 1)
+        self.assertEqual(
+            nested_select_stmt.target_list[0].etype, ExpressionType.TUPLE_VALUE
+        )
+        self.assertEqual(nested_select_stmt.target_list[0].name, "*")
+        self.assertIsInstance(nested_select_stmt.from_table, TableRef)
+        self.assertIsInstance(nested_select_stmt.from_table.table, TableInfo)
+        self.assertEqual(nested_select_stmt.from_table.table.table_name, "home_sales")
+        self.assertEqual(
+            nested_select_stmt.from_table.table.database_name, "postgres_data"
+        )
+
     def test_create_function_statement(self):
         parser = Parser()
         create_func_query = """CREATE FUNCTION IF NOT EXISTS FastRCNN
@@ -669,6 +745,7 @@ class ParserTests(unittest.TestCase):
         expected_cci.nullable = True
         expected_stmt = CreateFunctionStatement(
             "FastRCNN",
+            False,
             True,
             Path("data/fastrcnn.py"),
             [
@@ -793,6 +870,7 @@ class ParserTests(unittest.TestCase):
         insert_stmt = InsertTableStatement(table)
         create_func = CreateFunctionStatement(
             "func",
+            False,
             False,
             Path("data/fastrcnn.py"),
             [
@@ -949,14 +1027,3 @@ class ParserTests(unittest.TestCase):
         self.assertNotEqual(tuple_frame, table_ref)
         self.assertNotEqual(join_node, table_ref)
         self.assertNotEqual(table_ref, table_info)
-
-    def test_lark(self):
-        query = """CREATE FUNCTION FaceDetector
-                  INPUT  (frame NDARRAY UINT8(3, ANYDIM, ANYDIM))
-                  OUTPUT (bboxes NDARRAY FLOAT32(ANYDIM, 4),
-                          scores NDARRAY FLOAT32(ANYDIM))
-                  TYPE  FaceDetection
-                  IMPL  'evadb/functions/face_detector.py';
-                  """
-        parser = Parser()
-        parser.parse(query)

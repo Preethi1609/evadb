@@ -174,7 +174,8 @@ def release_version(current_version):
     run_command(f"git push origin release-{NEXT_RELEASE}")
 
 
-def get_commit_id_of_latest_release():
+def get_commit_id_of_latest_release(release_index=0):
+    # Default to the latest release.
     import requests
 
     repo = "georgia-tech-db/evadb"
@@ -182,7 +183,7 @@ def get_commit_id_of_latest_release():
     response = requests.get(url)
     data = response.json()
 
-    latest_release = data[0]
+    latest_release = data[release_index]
     release_date = latest_release["created_at"]
 
     return release_date
@@ -229,7 +230,6 @@ def publish_wheels(tag):
 def upload_assets(changelog, tag):
     # Authentication token
     access_token = os.environ["GITHUB_KEY"]
-    print(access_token)
     # Repository information
     repo_owner = "georgia-tech-db"
     repo_name = "evadb"
@@ -292,12 +292,11 @@ def bump_up_version(next_version):
 
     NEXT_RELEASE = f"v{str(next_version)}+dev"
 
-    print(NEXT_RELEASE)
-
     run_command("git checkout -b bump-" + NEXT_RELEASE)
     run_command("git add . -u")
     run_command("git commit -m '[BUMP]: " + NEXT_RELEASE + "'")
     run_command("git push --set-upstream origin bump-" + NEXT_RELEASE)
+    run_command(f"gh pr create -B staging -H bump-{NEXT_RELEASE} --title 'Bump Version to {NEXT_RELEASE}' --body 'Bump Version to {NEXT_RELEASE}'")
 
 
 # ==============================================
@@ -417,8 +416,9 @@ if __name__ == "__main__":
         publish_wheels(current_version_str_without_dev)
 
     if args.upload_assets:
-        print("upload assets")
-        release_date = get_commit_id_of_latest_release()
+        # We assume that we run each command sequentially here. When a new release
+        # is made, the change log needs to be based on the second latest release.
+        release_date = get_commit_id_of_latest_release(release_index=1)
         changelog = get_changelog(release_date)
         upload_assets(changelog, current_version_str_without_dev)
 

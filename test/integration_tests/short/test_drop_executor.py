@@ -112,6 +112,11 @@ class DropObjectExecutorTest(unittest.TestCase):
                 self.evadb, drop_query, do_not_print_exceptions=True
             )
 
+        # we should be able to re-create the table
+        execute_query_fetch_all(self.evadb, query)
+        # clean up
+        execute_query_fetch_all(self.evadb, drop_query)
+
     def run_create_function_query(self):
         create_function_query = """CREATE FUNCTION DummyObjectDetector
             INPUT  (Frame_Array NDARRAY UINT8(3, 256, 256))
@@ -135,6 +140,11 @@ class DropObjectExecutorTest(unittest.TestCase):
             function_name
         )
         self.assertTrue(function is None)
+
+        # We should be able to re-create the function
+        self.run_create_function_query()
+        # clean up
+        execute_query_fetch_all(self.evadb, drop_query)
 
     def test_drop_wrong_function_name(self):
         self.run_create_function_query()
@@ -191,3 +201,47 @@ class DropObjectExecutorTest(unittest.TestCase):
         self.assertTrue(index_obj is None)
 
         # todo check if the index is also removed from the underlying vector store
+
+    #### DROP INDEX
+
+    def test_should_drop_database(self):
+        # Create database.
+        database_name = "test_data_source"
+        params = {
+            "database": "evadb.db",
+        }
+        query = f"""CREATE DATABASE {database_name}
+                    WITH ENGINE = "sqlite",
+                    PARAMETERS = {params};"""
+        execute_query_fetch_all(self.evadb, query)
+        self.assertIsNotNone(
+            self.evadb.catalog().get_database_catalog_entry(database_name)
+        )
+
+        # DROP DATABASE
+        execute_query_fetch_all(self.evadb, f"DROP DATABASE {database_name}")
+        self.assertIsNone(
+            self.evadb.catalog().get_database_catalog_entry(database_name)
+        )
+
+        # DROP should pass with warning
+        result = execute_query_fetch_all(
+            self.evadb, f"DROP DATABASE IF EXISTS {database_name}"
+        )
+        self.assertTrue("does not exist" in result.frames.to_string())
+
+        # DROP should throw error
+        with self.assertRaises(ExecutorError):
+            execute_query_fetch_all(
+                self.evadb,
+                f"DROP DATABASE {database_name}",
+                do_not_print_exceptions=True,
+            )
+
+        # We should be able to add the database again
+        execute_query_fetch_all(self.evadb, query)
+
+        # clean up
+        result = execute_query_fetch_all(
+            self.evadb, f"DROP DATABASE IF EXISTS {database_name}"
+        )
