@@ -81,19 +81,9 @@ def generate_script(cursor: evadb.EvaDBCursor, df: pd.DataFrame, question: str) 
             dataframe is df. This is the result of print(df.head()):
             {str(df.head())}. Return a python script with comments to get the answer to the following question: {question}. Do not write code to load the CSV file."""
 
-    question_df = pd.DataFrame([{"prompt": prompt}])
-    question_df.to_csv(QUESTION_PATH)
-
-    cursor.drop_table("Question", if_exists=True).execute()
-    cursor.query("""CREATE TABLE IF NOT EXISTS Question (prompt TEXT(50));""").execute()
-    cursor.load(QUESTION_PATH, "Question", "csv").execute()
-
-    pd.set_option("display.max_colwidth", None)
-
-    query = cursor.table("Question").select("ChatGPT(prompt)")
     llm = GPT4All("ggml-model-gpt4all-falcon-q4_0.bin")
 
-    script_body = llm.generate(query)
+    script_body = llm.generate(prompt)
 
     return script_body
 
