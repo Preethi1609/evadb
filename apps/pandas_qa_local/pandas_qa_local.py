@@ -22,6 +22,7 @@ from typing import Dict
 from unidecode import unidecode
 
 import pandas as pd
+from pandasai import SmartDataframe
 
 import evadb
 
@@ -29,10 +30,7 @@ APP_SOURCE_DIR = os.path.abspath(os.path.dirname(__file__))
 CURRENT_WORKING_DIR = os.getcwd()  # used to locate evadb_data dir
 
 # default file paths
-DEFAULT_CSV_PATH = os.path.join(APP_SOURCE_DIR, "data", "country.csv")
-
-# temporary file paths
-QUESTION_PATH = os.path.join(APP_SOURCE_DIR, "question.csv")
+DEFAULT_CSV_PATH = os.path.join(APP_SOURCE_DIR, "data", "orders.csv")
 SCRIPT_PATH = os.path.join(APP_SOURCE_DIR, "script.py")
 
 def receive_user_input() -> Dict:
@@ -63,11 +61,10 @@ def receive_user_input() -> Dict:
 
     return user_input
 
-def generate_script(cursor: evadb.EvaDBCursor, df: pd.DataFrame, question: str) -> str:
+def generate_script(df: pd.DataFrame, question: str) -> str:
     """Generates script with llm.
 
     Args:
-        cursor (EVADBCursor): evadb api cursor.
         question (str): question to ask to llm.
 
     Returns
@@ -108,10 +105,6 @@ def cleanup():
     """Removes any temporary file / directory created by EvaDB."""
     if os.path.exists("evadb_data"):
         shutil.rmtree("evadb_data")
-    if os.path.exists(QUESTION_PATH):
-        os.remove(QUESTION_PATH)
-    if os.path.exists(SCRIPT_PATH):
-        os.remove(SCRIPT_PATH)
 
 
 if __name__ == "__main__":
@@ -120,12 +113,16 @@ if __name__ == "__main__":
         user_input = receive_user_input()
 
         # establish evadb api cursor
-        print("⏳ Establishing evadb connection...")
-        cursor = evadb.connect().cursor()
-        print("✅ evadb connection setup complete!")
+        # print("⏳ Establishing evadb connection...")
+        # cursor = evadb.connect().cursor()
+        # print("✅ evadb connection setup complete!")
 
         # Retrieve Dataframe
         df = pd.read_csv(user_input["csv_path"])
+        df = SmartDataframe(df)
+        df.clean_data()
+        # df.impute_missing_values()
+        # df.generate_features()
 
         print("\n===========================================")
         print("🪄 Run anything on the csv table like a conversation!")
@@ -139,7 +136,7 @@ if __name__ == "__main__":
         if question.lower() != "exit":
             # Generate response with chatgpt udf
             print("⏳ Generating response (may take a while)...")
-            script_body = generate_script(cursor, df, question)
+            script_body = generate_script(df, question)
             print("+--------------------------------------------------+")
             print("✅ Running this Python script:")
             print(script_body)
@@ -153,6 +150,8 @@ if __name__ == "__main__":
                 )
                 print(e)
 
+            # df.chat(question)
+
         cleanup()
         print("✅ Session ended.")
         print("===========================================")
@@ -162,7 +161,3 @@ if __name__ == "__main__":
         print(e)
         print("===========================================")
 
-
-
-if __name__ == "__main__":
-    main()
