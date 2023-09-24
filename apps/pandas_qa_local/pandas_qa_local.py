@@ -76,12 +76,14 @@ def generate_script(df: pd.DataFrame, question: str) -> str:
 
     prompt = f"""There is a dataframe in pandas (python). The name of the
             dataframe is df. This is the result of print(df.head()):
-            {str(df.head())}. Return a python script with comments to get the answer to the following question: {question}. Do not write code to load the CSV file."""
+            {str(df.head())}\nAssuming the dataframe is already loaded and named 'df'. Do not include pd.read_csv, do not write code to load the CSV file. Return a python script to get the answer to a question.    
+            Question : {question}. """
+    print("preethi", prompt)
 
     llm = GPT4All("ggml-model-gpt4all-falcon-q4_0.bin")
 
     script_body = llm.generate(prompt)
-
+    script_body = script_body.split("```")[1].lstrip("python")
     return script_body
 
 def run_script(script_body: str, user_input: Dict):
@@ -99,7 +101,7 @@ def run_script(script_body: str, user_input: Dict):
 
     with open(absolute_script_path, "w+") as script_file:
         script_file.write(script_body)
-    subprocess.run(["python", absolute_script_path])
+    subprocess.run(["python3", absolute_script_path])
 
 def cleanup():
     """Removes any temporary file / directory created by EvaDB."""
@@ -119,8 +121,8 @@ if __name__ == "__main__":
 
         # Retrieve Dataframe
         df = pd.read_csv(user_input["csv_path"])
-        df = SmartDataframe(df)
-        df.clean_data()
+        # df = SmartDataframe(df)
+        # df.clean_data()
         # df.impute_missing_values()
         # df.generate_features()
 
@@ -160,4 +162,3 @@ if __name__ == "__main__":
         print("❗️ Session ended with an error.")
         print(e)
         print("===========================================")
-
